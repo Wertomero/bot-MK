@@ -387,10 +387,35 @@ async def admin_jobs(cb: CallbackQuery):
             [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_admin")]]))
         return
     text = "📋 <b>Заявки на работу:</b>\n\n"
+    kb = []
     for j in jobs[:10]:
         text += f"🆔 {j['id']} | @{j['username']} | {j['sphere']}\n📝 {j['experience'][:50]}...\n📞 {j['contacts']} | 🕐 {j['timezone']}\n\n"
-    await cb.message.edit_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_admin")]]))
+        kb.append([InlineKeyboardButton(text=f"📩 Уведомить @{j['username']} (заявка принята)", callback_data=f"notify_job_{j['user_id']}_{j['id']}")])
+    kb.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_admin")])
+    await cb.message.edit_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
+
+
+@router.callback_query(F.data.startswith("notify_job_"))
+async def notify_job_applicant(cb: CallbackQuery, bot: Bot):
+    if not is_admin(cb.from_user.id):
+        await cb.answer("❌ Нет доступа!")
+        return
+    parts = cb.data.split("_")
+    uid = int(parts[2])
+    jid = parts[3]
+    
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("UPDATE job_applications SET status='notified' WHERE id=%s", (jid,))
+    conn.close()
+    
+    try:
+        await bot.send_message(uid, "✅ <b>Ваша заявка на работу в МК принята!</b>\nОжидайте дальнейших указаний от руководства.", parse_mode="HTML")
+        await cb.answer("✅ Уведомление отправлено!")
+    except:
+        await cb.answer("❌ Не удалось отправить уведомление!")
+    
+    await admin_jobs(cb)
 
 
 @router.callback_query(F.data == "admin_ideas")
