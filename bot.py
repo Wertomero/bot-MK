@@ -16,7 +16,7 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 DB_URL = os.getenv("DB_URL")
 
 # ID создателя (замени на свой)
-CREATOR_ID = 7989127445
+CREATOR_ID = 5091635656
 
 
 def get_conn():
