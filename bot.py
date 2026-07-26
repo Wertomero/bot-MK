@@ -17,6 +17,7 @@ DB_URL = os.getenv("DB_URL")
 
 # ID создателя (замени на свой)
 CREATOR_ID = 5091635656
+ADMIN_PASSWORD = "mkpanel"
 
 
 def get_conn():
@@ -100,13 +101,6 @@ def get_pending_requests():
     return c.fetchall()
 
 
-def update_chat_request(rid, status):
-    conn = get_conn()
-    c = conn.cursor()
-    c.execute("UPDATE direct_chat_requests SET status=%s WHERE id=%s", (status, rid))
-    conn.close()
-
-
 def create_chat(uid, admin_id):
     conn = get_conn()
     c = conn.cursor()
@@ -173,6 +167,7 @@ class ChatState(StatesGroup):
 class AdminStates(StatesGroup):
     waiting_for_admin_add = State()
     waiting_for_admin_remove = State()
+    waiting_for_admin_password = State()
 
 
 router = Router()
@@ -191,10 +186,26 @@ async def start(msg: Message):
 
 # ========== АДМИН-ПАНЕЛЬ ==========
 @router.message(Command("adminMK"))
-async def admin_panel(msg: Message):
-    if not is_admin(msg.from_user.id):
-        await msg.answer("🚫 Команда не найдена.")
+async def admin_panel_cmd(msg: Message, state: FSMContext):
+    if is_admin(msg.from_user.id):
+        await show_admin_panel(msg)
         return
+    await msg.answer("🔐 Введите пароль:")
+    await state.set_state(AdminStates.waiting_for_admin_password)
+
+
+@router.message(AdminStates.waiting_for_admin_password)
+async def check_admin_password(msg: Message, state: FSMContext):
+    if msg.text.strip() == ADMIN_PASSWORD:
+        await state.clear()
+        add_admin(msg.from_user.id, msg.from_user.username or "admin")
+        await show_admin_panel(msg)
+    else:
+        await msg.answer("❌ Неверный пароль!")
+        await state.clear()
+
+
+async def show_admin_panel(msg):
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📋 Заявки на работу", callback_data="admin_jobs")],
         [InlineKeyboardButton(text="💡 Идеи", callback_data="admin_ideas")],
@@ -203,6 +214,10 @@ async def admin_panel(msg: Message):
         [InlineKeyboardButton(text="👥 Управление админами", callback_data="admin_manage")],
     ])
     await msg.answer("🔐 Админ-панель МК", reply_markup=kb)
+
+
+async def admin_panel(msg):
+    await show_admin_panel(msg)
 
 
 # ========== ЗАЯВКА НА РАБОТУ ==========
@@ -240,7 +255,6 @@ async def job_timezone(msg: Message, state: FSMContext, bot: Bot):
     await state.clear()
     await msg.answer("✅ Заявка отправлена! Ожидайте рассмотрения.")
     
-    # Уведомление админам
     admins = get_all_admins()
     text = f"📋 <b>Новая заявка на работу!</b>\n👤 @{msg.from_user.username or '—'}\n🏢 Сфера: {data['sphere']}\n📝 Опыт: {data['experience']}\n📞 Контакты: {data['contacts']}\n🕐 Часовой пояс: {msg.text.strip()}"
     for a in admins:
@@ -275,7 +289,6 @@ async def idea_done(msg: Message, state: FSMContext, bot: Bot):
 # ========== ПРЯМАЯ СВЯЗЬ ==========
 @router.callback_query(F.data == "direct_chat")
 async def direct_chat_start(cb: CallbackQuery, state: FSMContext):
-    # Проверяем есть ли уже активный чат
     chat = get_active_chat(cb.from_user.id)
     if chat:
         await cb.message.edit_text("📞 У вас уже есть активный чат. Отправьте сообщение сюда.")
@@ -348,14 +361,12 @@ async def chat_message(msg: Message, bot: Bot):
         await msg.answer("❌ Чат не активен.")
         return
     
-    # Если пишет пользователь — пересылаем админу
     if msg.from_user.id == chat['user_id']:
         text = f"💬 <b>От:</b> @{msg.from_user.username or '—'}\n{msg.text}"
         try:
             await bot.send_message(chat['admin_id'], text, parse_mode="HTML")
         except:
             await msg.answer("❌ Сообщение не доставлено.")
-    # Если пишет админ — пересылаем пользователю
     elif msg.from_user.id == chat['admin_id']:
         text = f"💬 <b>От руководства:</b>\n{msg.text}"
         try:
@@ -501,7 +512,7 @@ async def admin_add_done(msg: Message, state: FSMContext):
     add_admin(uid, "admin")
     await state.clear()
     await msg.answer(f"✅ Админ {uid} добавлен!")
-    await admin_panel(msg)
+    await show_admin_panel(msg)
 
 
 @router.callback_query(F.data == "admin_remove")
@@ -526,12 +537,12 @@ async def admin_remove_done(msg: Message, state: FSMContext):
     remove_admin(uid)
     await state.clear()
     await msg.answer(f"✅ Админ {uid} удалён!")
-    await admin_panel(msg)
+    await show_admin_panel(msg)
 
 
 @router.callback_query(F.data == "back_to_admin")
 async def back_to_admin(cb: CallbackQuery):
-    await admin_panel(cb)
+    await show_admin_panel(cb.message)
 
 
 # ========== КОМАНДА ЗАКРЫТИЯ ЧАТА ==========
