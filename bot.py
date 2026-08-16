@@ -1,3 +1,4 @@
+from aiohttp import web
 import asyncio
 import os
 import logging
@@ -586,6 +587,9 @@ async def close_chat_user(msg: Message, state: FSMContext, bot: Bot):
         await msg.answer("У вас нет активного чата.")
 
 
+async def handle(request):
+    return web.Response(text="Bot is running")
+
 async def main():
     logging.basicConfig(level=logging.INFO)
     init_db()
@@ -593,10 +597,20 @@ async def main():
     await bot.set_my_commands([
         BotCommand(command="start", description="Главное меню"),
     ])
+    
+    # Веб-сервер для Render
+    app = web.Application()
+    app.router.add_get("/", handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", 8000))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    print(f"Веб-сервер на порту {port}")
+    
     dp = Dispatcher(storage=MemoryStorage())
     dp.include_router(router)
     await dp.start_polling(bot)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
