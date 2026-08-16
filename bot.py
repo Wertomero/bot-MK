@@ -522,7 +522,7 @@ async def admin_jobs(cb: CallbackQuery):
     for j in jobs[:10]:
         text += f"🆔 {j['id']} | @{j['username']} | {j['sphere']}\n📞 {j['contacts']}\n\n"
         kb.append([InlineKeyboardButton(text=f"📩 Уведомить @{j['username']}", callback_data=f"notify_job_{j['user_id']}_{j['id']}")])
-       kb.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_admin")])
+        kb.append([InlineKeyboardButton(text="🔙 Назад", callback_data="back_to_admin")])
     await cb.message.edit_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=kb))
 
 
